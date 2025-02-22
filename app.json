@@ -1,0 +1,39 @@
+{
+  "name": "My Telegram Bot",
+  "description": "A Telegram bot using Pyrogram",
+  "repository": "https://github.com/prince-codez/NO-ABUSE",
+  "keywords": ["telegram", "bot", "pyrogram"],
+  "env": {
+    "API_ID": {
+      "description": "Your Telegram API ID from my.telegram.org",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Your Telegram API Hash from my.telegram.org",
+      "required": true
+    },
+    "BOT_TOKEN": {
+      "description": "Your Telegram Bot Token from BotFather",
+      "required": true
+    },
+    "ADMIN_CHAT_ID": {
+      "description": "Your Telegram Admin Chat ID",
+      "required": true
+    },
+    "SIGHTENGINE_API_USER": {
+      "description": "Your Sightengine API User",
+      "required": true
+    },
+    "SIGHTENGINE_API_SECRET": {
+      "description": "Your Sightengine API Secret",
+      "required": true
+    },
+    "OPENAI_API_KEY": {
+      "description": "Your OpenAI API Key",
+      "required": true
+    }
+  },
+  "buildpacks": [
+    { "url": "heroku/python" }
+  ]
+}
