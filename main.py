@@ -1,5 +1,6 @@
 import telegram
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 import requests
 import openai
 import os
@@ -12,37 +13,45 @@ API_SECRET = os.getenv("SIGHTENGINE_API_SECRET")
 NSFW_API_URL = "https://api.sightengine.com/1.0/check.json"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Dictionary to track user violations
+# ✅ Dictionary to track user violations
 violations = {}
 
-# ✅ Function to check if an image/video is NSFW
-def is_nsfw(file_path):
-    with open(file_path, "rb") as f:
-        response = requests.post(NSFW_API_URL, files={"media": f}, data={
-            "models": "nudity",
-            "api_user": API_USER,
-            "api_secret": API_SECRET
-        })
-    result = response.json()
-    return result.get("nudity", {}).get("safe", 1) < 0.7
+# ✅ Function to check if media is NSFW
+async def is_nsfw(file_path):
+    try:
+        with open(file_path, "rb") as f:
+            response = requests.post(NSFW_API_URL, files={"media": f}, data={
+                "models": "nudity,wad,offensive",
+                "api_user": API_USER,
+                "api_secret": API_SECRET
+            })
+        result = response.json()
+        return result.get("nudity", {}).get("safe", 1) < 0.7
+    except Exception as e:
+        print(f"NSFW API Error: {e}")
+        return False
 
 # ✅ Function to check text for NSFW content
-def is_nsfw_text(text):
-    openai.api_key = OPENAI_API_KEY
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "system", "content": "Detect if this message contains 18+ content."},
-                  {"role": "user", "content": text}]
-    )
-    return "yes" in response['choices'][0]['message']['content'].lower()
+async def is_nsfw_text(text):
+    try:
+        openai.api_key = OPENAI_API_KEY
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "system", "content": "Detect if this message contains 18+ content."},
+                      {"role": "user", "content": text}]
+        )
+        return "yes" in response['choices'][0]['message']['content'].lower()
+    except Exception as e:
+        print(f"OpenAI API Error: {e}")
+        return False
 
 # ✅ /start command function
-def start(update, context):
+async def start(update: Update, context: CallbackContext):
     user_name = update.message.from_user.first_name
-    update.message.reply_text(f"👋 **Welcome, {user_name}!**\n\nThis bot automatically removes NSFW content from chats.")
+    await update.message.reply_text(f"👋 **Welcome, {user_name}!**\n\nThis bot automatically removes NSFW content from chats.")
 
 # ✅ /check command function (API status check)
-def check(update, context):
+async def check(update: Update, context: CallbackContext):
     error_logs = []
 
     # ✅ Check SightEngine API
@@ -69,35 +78,49 @@ def check(update, context):
 
     # ✅ Send status message
     if error_logs:
-        update.message.reply_text("\n".join(error_logs))
+        await update.message.reply_text("\n".join(error_logs))
     else:
-        update.message.reply_text("✅ All APIs are working correctly!")
+        await update.message.reply_text("✅ All APIs are working correctly!")
 
 # ✅ Function to handle messages
-def handle_messages(update, context):
+async def handle_messages(update: Update, context: CallbackContext):
     message = update.message
     user_id = message.from_user.id
     chat_id = message.chat.id
     user_name = message.from_user.username or message.from_user.first_name
 
-    # Check for NSFW text
-    if message.text and is_nsfw_text(message.text):
-        message.delete()
-        context.bot.send_message(chat_id, f"⚠️ **NSFW text detected!**\nMessage deleted.")
-        log_violation(user_id, user_name, chat_id, context)
+    # ✅ NSFW Text Detection
+    if message.text and await is_nsfw_text(message.text):
+        await message.delete()
+        await context.bot.send_message(chat_id, f"⚠️ **NSFW text detected!**\nMessage deleted.")
+        await log_violation(user_id, user_name, chat_id, context)
+        return
 
-    # Check for NSFW images/videos
-    elif message.photo or message.video:
-        file = message.photo[-1].get_file() if message.photo else message.video.get_file()
-        file_path = file.download()
+    # ✅ NSFW Media Detection (Images, Videos, GIFs, Stickers)
+    file = None
+    if message.photo:
+        file = await message.photo[-1].get_file()
+    elif message.video:
+        file = await message.video.get_file()
+    elif message.animation:  # GIFs
+        file = await message.animation.get_file()
+    elif message.sticker and message.sticker.is_animated is False:  # Static Stickers
+        file = await message.sticker.get_file()
 
-        if is_nsfw(file_path):
-            message.delete()
-            context.bot.send_message(chat_id, f"⚠️ **NSFW media detected!**\nMessage deleted.")
-            log_violation(user_id, user_name, chat_id, context)
+    if file:
+        file_path = await file.download()
+        if await is_nsfw(file_path):
+            await message.delete()
+            await context.bot.send_message(chat_id, f"⚠️ **NSFW media detected!**\nMessage deleted.")
+            await log_violation(user_id, user_name, chat_id, context)
+            return
+
+    # ✅ Ignore audio files (NSFW detection not possible)
+    if message.audio or message.voice:
+        return  
 
 # ✅ Function to log user violations
-def log_violation(user_id, user_name, chat_id, context):
+async def log_violation(user_id, user_name, chat_id, context):
     if user_id not in violations:
         violations[user_id] = 1
     else:
@@ -105,30 +128,30 @@ def log_violation(user_id, user_name, chat_id, context):
 
     # Warn User
     if violations[user_id] == 1:
-        context.bot.send_message(chat_id, f"⚠️ **Warning:** {user_name}, sending NSFW content is not allowed!")
+        await context.bot.send_message(chat_id, f"⚠️ **Warning:** {user_name}, sending NSFW content is not allowed!")
     # Ban User after 3 violations
     elif violations[user_id] >= 3:
-        context.bot.kick_chat_member(chat_id, user_id)
-        context.bot.send_message(chat_id, f"🚫 {user_name} has been banned for sending NSFW content!")
+        await context.bot.ban_chat_member(chat_id, user_id)
+        await context.bot.send_message(chat_id, f"🚫 {user_name} has been banned for sending NSFW content!")
 
     # Log to Admin
-    context.bot.send_message(ADMIN_CHAT_ID, f"🚨 **Violation Alert** 🚨\n👤 User: {user_name}\n⚠️ Warnings: {violations[user_id]}")
+    await context.bot.send_message(ADMIN_CHAT_ID, f"🚨 **Violation Alert** 🚨\n👤 User: {user_name}\n⚠️ Warnings: {violations[user_id]}")
 
 # ✅ Main function
-def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+async def main():
+    app = Application.builder().token(TOKEN).build()
 
     # Add command handlers
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("check", check))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("check", check))
     
     # Add message handler
-    dp.add_handler(MessageHandler(Filters.text | Filters.photo | Filters.video, handle_messages))
+    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.ANIMATION | filters.STICKER, handle_messages))
 
     # Start bot
-    updater.start_polling()
-    updater.idle()
+    print("🤖 Bot is running...")
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
