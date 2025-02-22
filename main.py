@@ -99,7 +99,7 @@ async def log_violation(user_id, user_name, chat_id, context):
     await context.bot.send_message(ADMIN_CHAT_ID, f"🚨 **Violation Alert** 🚨\n👤 User: {user_name}\n⚠️ Warnings: {violations[user_id]}")
 
 # ✅ Main Bot Function
-async def main():
+async def run_bot():
     app = ApplicationBuilder().token(TOKEN).build()
 
     # ✅ Commands
@@ -113,4 +113,6 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(run_bot())
