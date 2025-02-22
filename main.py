@@ -1,12 +1,12 @@
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
+import os
 import requests
 import openai
-import os
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext
 
 # ✅ Load Environment Variables
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID"))
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", 0))  # Default to 0 if not set
 API_USER = os.getenv("SIGHTENGINE_API_USER")
 API_SECRET = os.getenv("SIGHTENGINE_API_SECRET")
 NSFW_API_URL = "https://api.sightengine.com/1.0/check.json"
@@ -116,7 +116,7 @@ async def handle_messages(update: Update, context: CallbackContext):
 
     # ✅ Ignore audio files (NSFW detection not possible)
     if message.audio or message.voice:
-        return
+        return    
 
 # ✅ Function to log user violations
 async def log_violation(user_id, user_name, chat_id, context):
@@ -138,12 +138,12 @@ async def log_violation(user_id, user_name, chat_id, context):
 
 # ✅ Main function
 async def main():
-    app = Application.builder().token(TOKEN).build()
+    app = ApplicationBuilder().token(TOKEN).build()
 
     # Add command handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("check", check))
-
+      
     # Add message handler
     app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.ANIMATION | filters.STICKER, handle_messages))
 
