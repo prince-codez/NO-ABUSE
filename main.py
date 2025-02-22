@@ -1,4 +1,3 @@
-import telegram
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext
 import requests
@@ -117,7 +116,7 @@ async def handle_messages(update: Update, context: CallbackContext):
 
     # ✅ Ignore audio files (NSFW detection not possible)
     if message.audio or message.voice:
-        return  
+        return
 
 # ✅ Function to log user violations
 async def log_violation(user_id, user_name, chat_id, context):
@@ -144,7 +143,7 @@ async def main():
     # Add command handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("check", check))
-    
+
     # Add message handler
     app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.ANIMATION | filters.STICKER, handle_messages))
 
